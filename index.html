@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Page Editor</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+<style>
+body{
+    margin:0;
+    padding:20px;
+    font-family:Arial, sans-serif;
+    background:#f5f5f5;
+}
+
+h1{
+    text-align:center;
+}
+
+.toolbar{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:20px;
+}
+
+button{
+    padding:10px 18px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+}
+
+.primary{
+    background:#2563eb;
+    color:white;
+}
+
+.danger{
+    background:#dc2626;
+    color:white;
+}
+
+#pages{
+    display:flex;
+    flex-wrap:wrap;
+    gap:15px;
+}
+
+.page-card{
+    width:180px;
+    background:white;
+    border-radius:10px;
+    padding:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);
+    cursor:move;
+    position:relative;
+}
+
+.page-card canvas{
+    width:100%;
+    display:block;
+    border:1px solid #ddd;
+}
+
+.page-info{
+    margin-top:8px;
+    text-align:center;
+    font-size:13px;
+    word-break:break-word;
+}
+
+.delete-btn{
+    position:absolute;
+    top:5px;
+    right:5px;
+    width:28px;
+    height:28px;
+    border:none;
+    border-radius:50%;
+    background:red;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.delete-btn:hover{
+    background:#b91c1c;
+}
+
+.status{
+    text-align:center;
+    margin-top:10px;
+    color:#444;
+}
+</style>
+</head>
+<body>
+
+<h1>PDF Page Editor</h1>
+
+<div class="toolbar">
+    <input type="file" id="pdfInput" multiple accept=".pdf">
+    <button class="primary" id="downloadBtn">
+        Download PDF Baru
+    </button>
+</div>
+
+<div class="status" id="status"></div>
+
+<div id="pages"></div>
+
+<script>
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const pagesContainer = document.getElementById('pages');
+const statusText = document.getElementById('status');
+
+let uploadedPdfs = {};
+let pageStore = [];
+
+new Sortable(pagesContainer,{
+    animation:150
+});
+
+function generateId() {
+    return Date.now().toString(36) +
+           Math.random().toString(36).substring(2);
+}
+
+document
+.getElementById('pdfInput')
+.addEventListener('change', async (event)=>{
+
+    const files = event.target.files;
+
+    for(const file of files){
+
+        try{
+
+            statusText.innerText =
+            `Memproses ${file.name}...`;
+
+            const buffer = await file.arrayBuffer();
+
+            const pdfBytes =
+            new Uint8Array(buffer);
+
+            const pdfId = generateId();
+
+            uploadedPdfs[pdfId] =
+            pdfBytes.slice();
+
+            const pdf =
+            await pdfjsLib.getDocument({
+                data: pdfBytes
+            }).promise;
+
+            for(
+                let pageNum = 1;
+                pageNum <= pdf.numPages;
+                pageNum++
+            ){
+
+                const page =
+                await pdf.getPage(pageNum);
+
+                const viewport =
+                page.getViewport({
+                    scale:0.4
+                });
+
+                const canvas =
+                document.createElement('canvas');
+
+                const context =
+                canvas.getContext('2d');
+
+                canvas.width =
+                viewport.width;
+
+                canvas.height =
+                viewport.height;
+
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                }).promise;
+
+                const pageId =
+                generateId();
+
+                pageStore.push({
+                    id: pageId,
+                    pdfId: pdfId,
+                    pageNumber: pageNum,
+                    fileName: file.name
+                });
+
+                const card =
+                document.createElement('div');
+
+                card.className =
+                'page-card';
+
+                card.dataset.id =
+                pageId;
+
+                const deleteBtn =
+                document.createElement('button');
+
+                deleteBtn.className =
+                'delete-btn';
+
+                deleteBtn.innerHTML =
+                '&times;';
+
+                deleteBtn.onclick = () => {
+
+                    pageStore =
+                    pageStore.filter(
+                        p => p.id !== pageId
+                    );
+
+                    card.remove();
+                };
+
+                const info =
+                document.createElement('div');
+
+                info.className =
+                'page-info';
+
+                info.innerHTML =
+                `
+                <strong>${file.name}</strong>
+                <br>
+                Halaman ${pageNum}
+                `;
+
+                card.appendChild(deleteBtn);
+                card.appendChild(canvas);
+                card.appendChild(info);
+
+                pagesContainer
+                .appendChild(card);
+            }
+
+        }catch(error){
+
+            console.error(error);
+
+            alert(
+                'Gagal membuka PDF: ' +
+                file.name
+            );
+        }
+    }
+
+    statusText.innerText =
+    `${pageStore.length} halaman siap diedit`;
+});
+
+document
+.getElementById('downloadBtn')
+.addEventListener(
+'click',
+exportPDF
+);
+
+async function exportPDF(){
+
+    try{
+
+        const cards =
+        [...document.querySelectorAll('.page-card')];
+
+        if(cards.length === 0){
+
+            alert(
+                'Tidak ada halaman'
+            );
+
+            return;
+        }
+
+        statusText.innerText =
+        'Membuat PDF baru...';
+
+        const mergedPdf =
+        await PDFLib.PDFDocument.create();
+
+        const cache = {};
+
+        for(const card of cards){
+
+            const pageData =
+            pageStore.find(
+                p => p.id === card.dataset.id
+            );
+
+            if(!pageData) continue;
+
+            if(!cache[pageData.pdfId]){
+
+                cache[pageData.pdfId] =
+                await PDFLib.PDFDocument.load(
+                    uploadedPdfs[
+                        pageData.pdfId
+                    ]
+                );
+            }
+
+            const sourcePdf =
+            cache[pageData.pdfId];
+
+            const copiedPages =
+            await mergedPdf.copyPages(
+                sourcePdf,
+                [
+                    pageData.pageNumber - 1
+                ]
+            );
+
+            mergedPdf.addPage(
+                copiedPages[0]
+            );
+        }
+
+        const pdfBytes =
+        await mergedPdf.save();
+
+        const blob =
+        new Blob(
+            [pdfBytes],
+            {
+                type:
+                'application/pdf'
+            }
+        );
+
+        const url =
+        URL.createObjectURL(blob);
+
+        const a =
+        document.createElement('a');
+
+        a.href = url;
+        a.download =
+        'edited.pdf';
+
+        document.body
+        .appendChild(a);
+
+        a.click();
+
+        a.remove();
+
+        URL.revokeObjectURL(url);
+
+        statusText.innerText =
+        'PDF berhasil dibuat';
+
+    }catch(error){
+
+        console.error(error);
+
+        statusText.innerText =
+        'Gagal membuat PDF';
+
+        alert(
+            'Error: ' +
+            error.message
+        );
+    }
+}
+
+</script>
+
+</body>
+</html>
