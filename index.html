@@ -146,12 +146,12 @@ button{
 
 <div class="toolbar">
     <div class="upload-box">
-        <label>📄 FILE A (ambil halaman 1 saja)</label>
+        <label>📄 FILE A (halaman 1 saja)</label>
         <input type="file" id="fileA" accept=".pdf">
     </div>
 
     <div class="upload-box">
-        <label>📚 FILE B (ambil semua halaman)</label>
+        <label>📚 FILE B (semua halaman)</label>
         <input type="file" id="fileB" accept=".pdf">
     </div>
 
@@ -174,11 +174,16 @@ const statusText = document.getElementById('status');
 const fileAInput = document.getElementById('fileA');
 const fileBInput = document.getElementById('fileB');
 
-let uploadedPdfs = {};   // { pdfId: Uint8Array }
-let pageStore = [];      // metadata tiap halaman
+// State terpisah untuk A dan B
+let pdfA = null;   // { id, bytes, fileName }
+let pdfB = null;   // { id, bytes, fileName }
+
+// Halaman A & B disimpan terpisah biar bisa replace tanpa ganggu yang lain
+let pagesA = [];   // halaman dari file A
+let pagesB = [];   // halaman dari file B
+
 let outputName = 'edited.pdf';
 
-// Sortable untuk swap / reorder
 new Sortable(pagesContainer, {
     animation: 150
 });
@@ -188,23 +193,24 @@ function generateId() {
            Math.random().toString(36).substring(2);
 }
 
-// Bersihkan nama file dari suffix " (n)" sebelum .pdf
 function cleanFileName(name) {
     return name
         .replace(/\s*\(\d+\)(?=\.pdf$)/i, '')
         .trim();
 }
 
-// Reset semua state (dipanggil tiap upload baru)
-function resetAll() {
-    uploadedPdfs = {};
-    pageStore = [];
+// Render ulang SEMUA card dari pagesA + pagesB (urutan: A dulu, B kemudian)
+function renderAll() {
     pagesContainer.innerHTML = '';
-    outputName = 'edited.pdf';
+
+    const allPages = [...pagesA, ...pagesB];
+    allPages.forEach(p => pagesContainer.appendChild(p.card));
+
+    updateStatus();
 }
 
-// Render 1 halaman jadi card
-async function renderPageToCard(pdf, pageNum, pdfId, fileName, tag) {
+// Buat card dari sebuah halaman
+async function createCard(pdf, pageNum, pdfId, fileName, tag) {
     const page = await pdf.getPage(pageNum);
     const viewport = page.getViewport({ scale: 0.4 });
 
@@ -220,14 +226,6 @@ async function renderPageToCard(pdf, pageNum, pdfId, fileName, tag) {
 
     const pageId = generateId();
 
-    pageStore.push({
-        id: pageId,
-        pdfId: pdfId,
-        pageNumber: pageNum,
-        fileName: fileName,
-        tag: tag
-    });
-
     const card = document.createElement('div');
     card.className = 'page-card';
     card.dataset.id = pageId;
@@ -235,11 +233,6 @@ async function renderPageToCard(pdf, pageNum, pdfId, fileName, tag) {
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'delete-btn';
     deleteBtn.innerHTML = '&times;';
-    deleteBtn.onclick = () => {
-        pageStore = pageStore.filter(p => p.id !== pageId);
-        card.remove();
-        updateStatus();
-    };
 
     const info = document.createElement('div');
     info.className = 'page-info';
@@ -255,81 +248,103 @@ async function renderPageToCard(pdf, pageNum, pdfId, fileName, tag) {
     card.appendChild(canvas);
     card.appendChild(info);
 
-    pagesContainer.appendChild(card);
+    const data = {
+        id: pageId,
+        pdfId: pdfId,
+        pageNumber: pageNum,
+        fileName: fileName,
+        tag: tag,
+        card: card
+    };
+
+    // Tombol hapus — cari di pagesA & pagesB, buang dari sana
+    deleteBtn.onclick = () => {
+        pagesA = pagesA.filter(p => p.id !== pageId);
+        pagesB = pagesB.filter(p => p.id !== pageId);
+        card.remove();
+        updateStatus();
+    };
+
+    return data;
 }
 
 function updateStatus() {
-    statusText.innerText = `${pageStore.length} halaman siap diedit`;
+    const total = pagesA.length + pagesB.length;
+    statusText.innerText = `${total} halaman siap diedit ` +
+        `(A: ${pagesA.length}, B: ${pagesB.length})`;
 }
 
-// Handle upload FILE A → reset + ambil halaman 1 saja
+// ===== Upload FILE A =====
 fileAInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    resetAll();
-
     try {
-        statusText.innerText = `Memproses ${file.name}...`;
+        statusText.innerText = `Memproses File A: ${file.name}...`;
 
         const buffer = await file.arrayBuffer();
         const pdfBytes = new Uint8Array(buffer);
 
         const pdfId = generateId();
-        uploadedPdfs[pdfId] = pdfBytes.slice();
+        pdfA = { id: pdfId, bytes: pdfBytes.slice(), fileName: file.name };
 
         const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
-        // Ambil halaman 1 saja
-        await renderPageToCard(pdf, 1, pdfId, file.name, 'A');
+        // Ambil halaman 1 saja → replace pagesA
+        const cardData = await createCard(pdf, 1, pdfId, file.name, 'A');
+        pagesA = [cardData];
 
-        updateStatus();
+        renderAll();
+
     } catch (error) {
         console.error(error);
-        alert('Gagal membuka PDF: ' + file.name);
+        alert('Gagal membuka File A: ' + file.name);
         statusText.innerText = 'Error';
     }
 });
 
-// Handle upload FILE B → reset + ambil SEMUA halaman
+// ===== Upload FILE B =====
 fileBInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    resetAll();
-
-    // Nama output diambil dari file B (cleaned)
-    outputName = cleanFileName(file.name);
-
     try {
-        statusText.innerText = `Memproses ${file.name}...`;
+        statusText.innerText = `Memproses File B: ${file.name}...`;
 
         const buffer = await file.arrayBuffer();
         const pdfBytes = new Uint8Array(buffer);
 
         const pdfId = generateId();
-        uploadedPdfs[pdfId] = pdfBytes.slice();
+        pdfB = { id: pdfId, bytes: pdfBytes.slice(), fileName: file.name };
+
+        // Nama output dari file B (cleaned)
+        outputName = cleanFileName(file.name);
 
         const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
-        // Ambil semua halaman
+        // Ambil semua halaman → replace pagesB
+        const newPages = [];
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            await renderPageToCard(pdf, pageNum, pdfId, file.name, 'B');
+            const cardData = await createCard(pdf, pageNum, pdfId, file.name, 'B');
+            newPages.push(cardData);
         }
+        pagesB = newPages;
 
-        updateStatus();
+        renderAll();
+
     } catch (error) {
         console.error(error);
-        alert('Gagal membuka PDF: ' + file.name);
+        alert('Gagal membuka File B: ' + file.name);
         statusText.innerText = 'Error';
     }
 });
 
-// Export PDF
+// ===== Export =====
 document.getElementById('downloadBtn').addEventListener('click', exportPDF);
 
 async function exportPDF() {
     try {
+        // Baca urutan sesuai DOM (biar hasil swap keikut)
         const cards = [...document.querySelectorAll('.page-card')];
 
         if (cards.length === 0) {
@@ -339,17 +354,28 @@ async function exportPDF() {
 
         statusText.innerText = 'Membuat PDF baru...';
 
+        // Gabung semua page data (A + B) buat lookup by id
+        const allPages = [...pagesA, ...pagesB];
+        const pageMap = {};
+        allPages.forEach(p => pageMap[p.id] = p);
+
         const mergedPdf = await PDFLib.PDFDocument.create();
         const cache = {};
 
         for (const card of cards) {
-            const pageData = pageStore.find(p => p.id === card.dataset.id);
+            const pageData = pageMap[card.dataset.id];
             if (!pageData) continue;
 
             if (!cache[pageData.pdfId]) {
-                cache[pageData.pdfId] = await PDFLib.PDFDocument.load(
-                    uploadedPdfs[pageData.pdfId]
-                );
+                // Cari bytes dari pdfA atau pdfB
+                let sourceBytes = null;
+                if (pdfA && pdfA.id === pageData.pdfId) sourceBytes = pdfA.bytes;
+                if (pdfB && pdfB.id === pageData.pdfId) sourceBytes = pdfB.bytes;
+
+                if (!sourceBytes) continue;
+
+                cache[pageData.pdfId] =
+                    await PDFLib.PDFDocument.load(sourceBytes);
             }
 
             const sourcePdf = cache[pageData.pdfId];
