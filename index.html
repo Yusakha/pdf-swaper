@@ -23,11 +23,31 @@ h1{
 
 .toolbar{
     display:flex;
-    gap:10px;
+    gap:15px;
     justify-content:center;
     align-items:center;
     flex-wrap:wrap;
     margin-bottom:20px;
+}
+
+.upload-box{
+    background:white;
+    padding:12px 16px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.upload-box label{
+    font-size:12px;
+    font-weight:bold;
+    color:#2563eb;
+}
+
+.upload-box input[type=file]{
+    font-size:13px;
 }
 
 button{
@@ -35,6 +55,7 @@ button{
     border:none;
     border-radius:8px;
     cursor:pointer;
+    font-weight:bold;
 }
 
 .primary{
@@ -42,15 +63,15 @@ button{
     color:white;
 }
 
-.danger{
-    background:#dc2626;
-    color:white;
+.primary:hover{
+    background:#1d4ed8;
 }
 
 #pages{
     display:flex;
     flex-wrap:wrap;
     gap:15px;
+    min-height:50px;
 }
 
 .page-card{
@@ -72,22 +93,38 @@ button{
 .page-info{
     margin-top:8px;
     text-align:center;
-    font-size:13px;
+    font-size:12px;
     word-break:break-word;
 }
+
+.page-info .badge{
+    display:inline-block;
+    padding:1px 6px;
+    border-radius:4px;
+    font-size:10px;
+    font-weight:bold;
+    color:white;
+    margin-bottom:3px;
+}
+
+.badge-a{ background:#2563eb; }
+.badge-b{ background:#16a34a; }
 
 .delete-btn{
     position:absolute;
     top:5px;
     right:5px;
-    width:28px;
-    height:28px;
+    width:26px;
+    height:26px;
     border:none;
     border-radius:50%;
     background:red;
     color:white;
     font-weight:bold;
     cursor:pointer;
+    font-size:14px;
+    line-height:1;
+    z-index:2;
 }
 
 .delete-btn:hover{
@@ -97,7 +134,9 @@ button{
 .status{
     text-align:center;
     margin-top:10px;
+    margin-bottom:10px;
     color:#444;
+    font-size:14px;
 }
 </style>
 </head>
@@ -106,9 +145,18 @@ button{
 <h1>PDF Page Editor</h1>
 
 <div class="toolbar">
-    <input type="file" id="pdfInput" multiple accept=".pdf">
+    <div class="upload-box">
+        <label>📄 FILE A (ambil halaman 1 saja)</label>
+        <input type="file" id="fileA" accept=".pdf">
+    </div>
+
+    <div class="upload-box">
+        <label>📚 FILE B (ambil semua halaman)</label>
+        <input type="file" id="fileB" accept=".pdf">
+    </div>
+
     <button class="primary" id="downloadBtn">
-        Download PDF Baru
+        ⬇ Download PDF Baru
     </button>
 </div>
 
@@ -123,12 +171,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 const pagesContainer = document.getElementById('pages');
 const statusText = document.getElementById('status');
+const fileAInput = document.getElementById('fileA');
+const fileBInput = document.getElementById('fileB');
 
-let uploadedPdfs = {};
-let pageStore = [];
+let uploadedPdfs = {};   // { pdfId: Uint8Array }
+let pageStore = [];      // metadata tiap halaman
+let outputName = 'edited.pdf';
 
-new Sortable(pagesContainer,{
-    animation:150
+// Sortable untuk swap / reorder
+new Sortable(pagesContainer, {
+    animation: 150
 });
 
 function generateId() {
@@ -136,250 +188,199 @@ function generateId() {
            Math.random().toString(36).substring(2);
 }
 
-document
-.getElementById('pdfInput')
-.addEventListener('change', async (event)=>{
+// Bersihkan nama file dari suffix " (n)" sebelum .pdf
+function cleanFileName(name) {
+    return name
+        .replace(/\s*\(\d+\)(?=\.pdf$)/i, '')
+        .trim();
+}
 
-    const files = event.target.files;
+// Reset semua state (dipanggil tiap upload baru)
+function resetAll() {
+    uploadedPdfs = {};
+    pageStore = [];
+    pagesContainer.innerHTML = '';
+    outputName = 'edited.pdf';
+}
 
-    for(const file of files){
+// Render 1 halaman jadi card
+async function renderPageToCard(pdf, pageNum, pdfId, fileName, tag) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 0.4 });
 
-        try{
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
 
-            statusText.innerText =
-            `Memproses ${file.name}...`;
+    await page.render({
+        canvasContext: context,
+        viewport: viewport
+    }).promise;
 
-            const buffer = await file.arrayBuffer();
+    const pageId = generateId();
 
-            const pdfBytes =
-            new Uint8Array(buffer);
+    pageStore.push({
+        id: pageId,
+        pdfId: pdfId,
+        pageNumber: pageNum,
+        fileName: fileName,
+        tag: tag
+    });
 
-            const pdfId = generateId();
+    const card = document.createElement('div');
+    card.className = 'page-card';
+    card.dataset.id = pageId;
 
-            uploadedPdfs[pdfId] =
-            pdfBytes.slice();
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.innerHTML = '&times;';
+    deleteBtn.onclick = () => {
+        pageStore = pageStore.filter(p => p.id !== pageId);
+        card.remove();
+        updateStatus();
+    };
 
-            const pdf =
-            await pdfjsLib.getDocument({
-                data: pdfBytes
-            }).promise;
+    const info = document.createElement('div');
+    info.className = 'page-info';
 
-            for(
-                let pageNum = 1;
-                pageNum <= pdf.numPages;
-                pageNum++
-            ){
+    const badgeClass = tag === 'A' ? 'badge-a' : 'badge-b';
+    info.innerHTML = `
+        <span class="badge ${badgeClass}">FILE ${tag}</span><br>
+        <strong>${fileName}</strong><br>
+        Halaman ${pageNum}
+    `;
 
-                const page =
-                await pdf.getPage(pageNum);
+    card.appendChild(deleteBtn);
+    card.appendChild(canvas);
+    card.appendChild(info);
 
-                const viewport =
-                page.getViewport({
-                    scale:0.4
-                });
+    pagesContainer.appendChild(card);
+}
 
-                const canvas =
-                document.createElement('canvas');
+function updateStatus() {
+    statusText.innerText = `${pageStore.length} halaman siap diedit`;
+}
 
-                const context =
-                canvas.getContext('2d');
+// Handle upload FILE A → reset + ambil halaman 1 saja
+fileAInput.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-                canvas.width =
-                viewport.width;
+    resetAll();
 
-                canvas.height =
-                viewport.height;
+    try {
+        statusText.innerText = `Memproses ${file.name}...`;
 
-                await page.render({
-                    canvasContext: context,
-                    viewport: viewport
-                }).promise;
+        const buffer = await file.arrayBuffer();
+        const pdfBytes = new Uint8Array(buffer);
 
-                const pageId =
-                generateId();
+        const pdfId = generateId();
+        uploadedPdfs[pdfId] = pdfBytes.slice();
 
-                pageStore.push({
-                    id: pageId,
-                    pdfId: pdfId,
-                    pageNumber: pageNum,
-                    fileName: file.name
-                });
+        const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
-                const card =
-                document.createElement('div');
+        // Ambil halaman 1 saja
+        await renderPageToCard(pdf, 1, pdfId, file.name, 'A');
 
-                card.className =
-                'page-card';
-
-                card.dataset.id =
-                pageId;
-
-                const deleteBtn =
-                document.createElement('button');
-
-                deleteBtn.className =
-                'delete-btn';
-
-                deleteBtn.innerHTML =
-                '&times;';
-
-                deleteBtn.onclick = () => {
-
-                    pageStore =
-                    pageStore.filter(
-                        p => p.id !== pageId
-                    );
-
-                    card.remove();
-                };
-
-                const info =
-                document.createElement('div');
-
-                info.className =
-                'page-info';
-
-                info.innerHTML =
-                `
-                <strong>${file.name}</strong>
-                <br>
-                Halaman ${pageNum}
-                `;
-
-                card.appendChild(deleteBtn);
-                card.appendChild(canvas);
-                card.appendChild(info);
-
-                pagesContainer
-                .appendChild(card);
-            }
-
-        }catch(error){
-
-            console.error(error);
-
-            alert(
-                'Gagal membuka PDF: ' +
-                file.name
-            );
-        }
+        updateStatus();
+    } catch (error) {
+        console.error(error);
+        alert('Gagal membuka PDF: ' + file.name);
+        statusText.innerText = 'Error';
     }
-
-    statusText.innerText =
-    `${pageStore.length} halaman siap diedit`;
 });
 
-document
-.getElementById('downloadBtn')
-.addEventListener(
-'click',
-exportPDF
-);
+// Handle upload FILE B → reset + ambil SEMUA halaman
+fileBInput.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-async function exportPDF(){
+    resetAll();
 
-    try{
+    // Nama output diambil dari file B (cleaned)
+    outputName = cleanFileName(file.name);
 
-        const cards =
-        [...document.querySelectorAll('.page-card')];
+    try {
+        statusText.innerText = `Memproses ${file.name}...`;
 
-        if(cards.length === 0){
+        const buffer = await file.arrayBuffer();
+        const pdfBytes = new Uint8Array(buffer);
 
-            alert(
-                'Tidak ada halaman'
-            );
+        const pdfId = generateId();
+        uploadedPdfs[pdfId] = pdfBytes.slice();
 
+        const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+
+        // Ambil semua halaman
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            await renderPageToCard(pdf, pageNum, pdfId, file.name, 'B');
+        }
+
+        updateStatus();
+    } catch (error) {
+        console.error(error);
+        alert('Gagal membuka PDF: ' + file.name);
+        statusText.innerText = 'Error';
+    }
+});
+
+// Export PDF
+document.getElementById('downloadBtn').addEventListener('click', exportPDF);
+
+async function exportPDF() {
+    try {
+        const cards = [...document.querySelectorAll('.page-card')];
+
+        if (cards.length === 0) {
+            alert('Tidak ada halaman');
             return;
         }
 
-        statusText.innerText =
-        'Membuat PDF baru...';
+        statusText.innerText = 'Membuat PDF baru...';
 
-        const mergedPdf =
-        await PDFLib.PDFDocument.create();
-
+        const mergedPdf = await PDFLib.PDFDocument.create();
         const cache = {};
 
-        for(const card of cards){
+        for (const card of cards) {
+            const pageData = pageStore.find(p => p.id === card.dataset.id);
+            if (!pageData) continue;
 
-            const pageData =
-            pageStore.find(
-                p => p.id === card.dataset.id
-            );
-
-            if(!pageData) continue;
-
-            if(!cache[pageData.pdfId]){
-
-                cache[pageData.pdfId] =
-                await PDFLib.PDFDocument.load(
-                    uploadedPdfs[
-                        pageData.pdfId
-                    ]
+            if (!cache[pageData.pdfId]) {
+                cache[pageData.pdfId] = await PDFLib.PDFDocument.load(
+                    uploadedPdfs[pageData.pdfId]
                 );
             }
 
-            const sourcePdf =
-            cache[pageData.pdfId];
-
-            const copiedPages =
-            await mergedPdf.copyPages(
+            const sourcePdf = cache[pageData.pdfId];
+            const copiedPages = await mergedPdf.copyPages(
                 sourcePdf,
-                [
-                    pageData.pageNumber - 1
-                ]
+                [pageData.pageNumber - 1]
             );
 
-            mergedPdf.addPage(
-                copiedPages[0]
-            );
+            mergedPdf.addPage(copiedPages[0]);
         }
 
-        const pdfBytes =
-        await mergedPdf.save();
+        const pdfBytes = await mergedPdf.save();
 
-        const blob =
-        new Blob(
-            [pdfBytes],
-            {
-                type:
-                'application/pdf'
-            }
-        );
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
 
-        const url =
-        URL.createObjectURL(blob);
-
-        const a =
-        document.createElement('a');
-
+        const a = document.createElement('a');
         a.href = url;
-        a.download =
-        'edited.pdf';
+        a.download = outputName;
 
-        document.body
-        .appendChild(a);
-
+        document.body.appendChild(a);
         a.click();
-
         a.remove();
 
         URL.revokeObjectURL(url);
 
-        statusText.innerText =
-        'PDF berhasil dibuat';
-
-    }catch(error){
-
+        statusText.innerText = 'PDF berhasil dibuat';
+    } catch (error) {
         console.error(error);
-
-        statusText.innerText =
-        'Gagal membuat PDF';
-
-        alert(
-            'Error: ' +
-            error.message
-        );
+        statusText.innerText = 'Gagal membuat PDF';
+        alert('Error: ' + error.message);
     }
 }
 
