@@ -203,7 +203,7 @@ function cleanFileName(name) {
 function renderAll() {
     pagesContainer.innerHTML = '';
 
-    const allPages = [...pagesA, ...pagesB];
+    const allPages = [...pagesB, ...pagesA];
     allPages.forEach(p => pagesContainer.appendChild(p.card));
 
     updateStatus();
