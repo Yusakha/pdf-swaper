@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Page Editor (Fast)</title>
+<title>PDF Page Editor (Local)</title>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="libs/pdf.min.js"></script>
+<script src="libs/pdf-lib.min.js"></script>
+<script src="libs/Sortable.min.js"></script>
 
 <style>
 body{margin:0;padding:20px;font-family:Arial,sans-serif;background:#f5f5f5}
@@ -32,7 +32,7 @@ button{padding:10px 18px;border:none;border-radius:8px;cursor:pointer;font-weigh
 </head>
 <body>
 
-<h1>PDF Page Editor</h1>
+<h1>PDF Page Editor (Local)</h1>
 
 <div class="toolbar">
     <div class="upload-box">
@@ -50,28 +50,25 @@ button{padding:10px 18px;border:none;border-radius:8px;cursor:pointer;font-weigh
 <div id="pages"></div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.min.js';
 
 const pagesContainer = document.getElementById('pages');
 const statusText     = document.getElementById('status');
 const fileAInput     = document.getElementById('fileA');
 const fileBInput     = document.getElementById('fileB');
 
-// State
-let pdfA = null;   // { id, bytes, fileName }
-let pdfB = null;   // { id, bytes, fileName }
+let pdfA = null;
+let pdfB = null;
 let pagesA = [];
 let pagesB = [];
 let outputName = 'edited.pdf';
 
-// Cache pdf.js document (biar gak reload berkali-kali)
-const pdfjsCache = {}; // pdfId -> PDFDocumentProxy
+const pdfjsCache = {};
 
 new Sortable(pagesContainer, { animation: 150 });
 
-const THUMB_MAX_WIDTH = 150;   // px, kecil biar cepat
-const CONCURRENCY     = 4;     // jumlah render paralel
+const THUMB_MAX_WIDTH = 150;
+const CONCURRENCY     = 4;
 
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -80,7 +77,6 @@ function cleanFileName(name) {
     return name.replace(/\s*\(\d+\)(?=\.pdf$)/i, '').trim();
 }
 
-// Render ulang semua card (A dulu baru B)
 function renderAll() {
     pagesContainer.innerHTML = '';
     const allPages = [...pagesB, ...pagesA];
@@ -93,7 +89,6 @@ function updateStatus() {
     statusText.innerText = `${total} halaman siap diedit (A: ${pagesA.length}, B: ${pagesB.length})`;
 }
 
-// Buat card tanpa nunggu render (placeholder dulu)
 function createCardPlaceholder(pdfId, pageNum, fileName, tag) {
     const pageId = generateId();
     const card = document.createElement('div');
@@ -106,7 +101,7 @@ function createCardPlaceholder(pdfId, pageNum, fileName, tag) {
 
     const canvas = document.createElement('canvas');
     canvas.width = THUMB_MAX_WIDTH;
-    canvas.height = Math.round(THUMB_MAX_WIDTH * 1.4); // rasio kasar
+    canvas.height = Math.round(THUMB_MAX_WIDTH * 1.4);
 
     const info = document.createElement('div');
     info.className = 'page-info';
@@ -140,7 +135,6 @@ function createCardPlaceholder(pdfId, pageNum, fileName, tag) {
     };
 }
 
-// Render thumbnail ke canvas dengan ukuran kecil & cepat
 async function renderThumb(pageData) {
     if (pageData._rendered) return;
     pageData._rendered = true;
@@ -151,8 +145,6 @@ async function renderThumb(pageData) {
 
         const page = await pdf.getPage(pageData.pageNumber);
         const vp1 = page.getViewport({ scale: 1 });
-
-        // Hitung scale agar lebar = THUMB_MAX_WIDTH
         const scale = THUMB_MAX_WIDTH / vp1.width;
         const viewport = page.getViewport({ scale });
 
@@ -169,12 +161,10 @@ async function renderThumb(pageData) {
             intent: 'display'
         }).promise;
     } catch (e) {
-        // diamkan error thumb, tidak perlu ganggu
         console.warn('thumb error', e);
     }
 }
 
-// Render semua thumbnail dengan batas konkurensi
 async function renderAllThumbs(list) {
     const queue = list.slice();
     const workers = Array.from({ length: CONCURRENCY }, async () => {
@@ -186,7 +176,6 @@ async function renderAllThumbs(list) {
     await Promise.all(workers);
 }
 
-// ===== Upload FILE A =====
 fileAInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -201,12 +190,9 @@ fileAInput.addEventListener('change', async (event) => {
         const pdf = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
         pdfjsCache[pdfId] = pdf;
 
-        // Hanya halaman 1
         const cardData = createCardPlaceholder(pdfId, 1, file.name, 'A');
         pagesA = [cardData];
         renderAll();
-
-        // Render thumbnail (non-blocking untuk UI)
         renderThumb(cardData);
 
     } catch (error) {
@@ -216,7 +202,6 @@ fileAInput.addEventListener('change', async (event) => {
     }
 });
 
-// ===== Upload FILE B =====
 fileBInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -232,7 +217,6 @@ fileBInput.addEventListener('change', async (event) => {
         const pdf = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
         pdfjsCache[pdfId] = pdf;
 
-        // Buat placeholder SEMUA halaman dulu (instan tampil)
         const newPages = [];
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
             newPages.push(createCardPlaceholder(pdfId, pageNum, file.name, 'B'));
@@ -240,7 +224,6 @@ fileBInput.addEventListener('change', async (event) => {
         pagesB = newPages;
         renderAll();
 
-        // Render thumbnail paralel, card sudah tampil duluan
         renderAllThumbs(newPages).then(() => {
             statusText.innerText = `${pagesA.length + pagesB.length} halaman siap diedit`;
         });
@@ -252,7 +235,6 @@ fileBInput.addEventListener('change', async (event) => {
     }
 });
 
-// ===== Export =====
 document.getElementById('downloadBtn').addEventListener('click', exportPDF);
 
 async function exportPDF() {
