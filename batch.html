@@ -310,17 +310,17 @@ async function mergeOne(fileA, fileB){
 
     const merged = await PDFLib.PDFDocument.create();
 
-    // File A halaman 1
-    if (pdfA.getPageCount() >= 1){
-        const [pageA] = await merged.copyPages(pdfA, [0]);
-        merged.addPage(pageA);
-    }
-
-    // File B semua halaman
+    // File B semua halaman (DULU)
     const totalB = pdfB.getPageCount();
     const indicesB = Array.from({ length: totalB }, (_, i) => i);
     const pagesB = await merged.copyPages(pdfB, indicesB);
     pagesB.forEach(p => merged.addPage(p));
+
+    // File A halaman 1 (BELAKANGAN)
+    if (pdfA.getPageCount() >= 1){
+        const [pageA] = await merged.copyPages(pdfA, [0]);
+        merged.addPage(pageA);
+    }
 
     return await merged.save({ useObjectStreams: true });
 }
