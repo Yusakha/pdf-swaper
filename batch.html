@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Batch Merger</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+body{
+    margin:0;
+    padding:20px;
+    font-family:Arial, sans-serif;
+    background:#f5f5f5;
+}
+h1{ text-align:center; }
+.toolbar{
+    display:flex;
+    gap:15px;
+    justify-content:center;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:20px;
+}
+.upload-box{
+    background:white;
+    padding:12px 16px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+.upload-box label{
+    font-size:12px;
+    font-weight:bold;
+    color:#2563eb;
+}
+button{
+    padding:10px 18px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:bold;
+}
+button:disabled{ opacity:.6; cursor:not-allowed; }
+.primary{ background:#2563eb; color:white; }
+.primary:hover:not(:disabled){ background:#1d4ed8; }
+.status{
+    text-align:center;
+    margin-top:10px;
+    margin-bottom:10px;
+    color:#444;
+    font-size:14px;
+    white-space:pre-line;
+}
+.progress{
+    width:100%;
+    max-width:500px;
+    height:8px;
+    background:#e5e7eb;
+    border-radius:4px;
+    margin:8px auto 16px;
+    overflow:hidden;
+    display:none;
+}
+.progress-bar{
+    height:100%;
+    background:#2563eb;
+    width:0%;
+    transition:width .15s;
+}
+.log{
+    max-width:800px;
+    margin:0 auto;
+    background:white;
+    border-radius:10px;
+    padding:16px;
+    font-family:monospace;
+    font-size:12px;
+    max-height:400px;
+    overflow:auto;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    display:none;
+}
+.log div{ padding:2px 0; }
+.log .ok{ color:#16a34a; }
+.log .err{ color:#dc2626; }
+.log .warn{ color:#d97706; }
+.log .info{ color:#2563eb; }
+</style>
+</head>
+<body>
+
+<h1>PDF Batch Merger</h1>
+
+<div class="toolbar">
+    <div class="upload-box">
+        <label>📄 FILE A — yang ada (2) — misal "13 april (2).pdf"</label>
+        <input type="file" id="fileA" accept=".pdf" multiple>
+    </div>
+
+    <div class="upload-box">
+        <label>📚 FILE B — yang biasa — misal "13 april.pdf"</label>
+        <input type="file" id="fileB" accept=".pdf" multiple>
+    </div>
+
+    <button class="primary" id="downloadBtn" disabled>
+        ⬇ Proses &amp; Download ZIP
+    </button>
+</div>
+
+<div class="status" id="status">Pilih file A dan B dulu.</div>
+<div class="progress" id="progressWrap">
+    <div class="progress-bar" id="progressBar"></div>
+</div>
+<div class="log" id="log"></div>
+
+<script>
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const statusText    = document.getElementById('status');
+const fileAInput    = document.getElementById('fileA');
+const fileBInput    = document.getElementById('fileB');
+const downloadBtn   = document.getElementById('downloadBtn');
+const progressWrap  = document.getElementById('progressWrap');
+const progressBar   = document.getElementById('progressBar');
+const logEl         = document.getElementById('log');
+
+let filesA = [];
+let filesB = [];
+
+function setProgress(p){
+    if (p == null){ progressWrap.style.display='none'; progressBar.style.width='0%'; }
+    else { progressWrap.style.display='block'; progressBar.style.width=Math.min(100,p)+'%'; }
+}
+
+function log(msg, cls=''){
+    logEl.style.display = 'block';
+    const d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = msg;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog(){ logEl.innerHTML = ''; }
+
+// Normalisasi: hapus "(2)", "(1)", dll + trim + lowercase
+function normalizeName(name){
+    return name
+        .replace(/\.pdf$/i, '')
+        .replace(/\s*\(\d+\)\s*/g, '')
+        .trim()
+        .toLowerCase();
+}
+
+function baseName(name){
+    return name.replace(/\.pdf$/i, '');
+}
+
+// ===== File input =====
+fileAInput.addEventListener('change', (e) => {
+    filesA = [...e.target.files].filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    updateButtonState();
+    statusText.innerText =
+        `File A: ${filesA.length} file\nFile B: ${filesB.length} file`;
+});
+
+fileBInput.addEventListener('change', (e) => {
+    filesB = [...e.target.files].filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    updateButtonState();
+    statusText.innerText =
+        `File A: ${filesA.length} file\nFile B: ${filesB.length} file`;
+});
+
+function updateButtonState(){
+    downloadBtn.disabled = !(filesA.length > 0 && filesB.length > 0);
+}
+
+// ===== Pairing =====
+function pairFiles(){
+    const mapB = new Map();
+    for (const f of filesB){
+        const key = normalizeName(f.name);
+        if (!mapB.has(key)) mapB.set(key, []);
+        mapB.get(key).push(f);
+    }
+
+    const pairs = [];
+    const usedB = new Set();
+    const unmatchedA = [];
+
+    for (const a of filesA){
+        const key = normalizeName(a.name);
+        const listB = mapB.get(key);
+        if (listB && listB.length > 0){
+            const b = listB.find(x => !usedB.has(x));
+            if (b){
+                usedB.add(b);
+                pairs.push({ a, b });
+                continue;
+            }
+        }
+        unmatchedA.push(a);
+    }
+
+    const unmatchedB = filesB.filter(f => !usedB.has(f));
+    return { pairs, unmatchedA, unmatchedB };
+}
+
+// ===== Proses =====
+downloadBtn.addEventListener('click', processAll);
+
+async function processAll(){
+    clearLog();
+    downloadBtn.disabled = true;
+
+    const { pairs, unmatchedA, unmatchedB } = pairFiles();
+
+    log(`Total File A: ${filesA.length}`, 'info');
+    log(`Total File B: ${filesB.length}`, 'info');
+    log(`Pasangan ditemukan: ${pairs.length}`, 'ok');
+
+    if (unmatchedA.length){
+        log(`⚠ File A tanpa pasangan (${unmatchedA.length}):`, 'warn');
+        unmatchedA.forEach(f => log(`   - ${f.name}`, 'warn'));
+    }
+    if (unmatchedB.length){
+        log(`⚠ File B tanpa pasangan (${unmatchedB.length}):`, 'warn');
+        unmatchedB.forEach(f => log(`   - ${f.name}`, 'warn'));
+    }
+
+    if (pairs.length === 0){
+        log('Tidak ada pasangan yang bisa diproses.', 'err');
+        downloadBtn.disabled = false;
+        return;
+    }
+
+    const zip = new JSZip();
+    let success = 0;
+    let failed = 0;
+
+    for (let i = 0; i < pairs.length; i++){
+        const { a, b } = pairs[i];
+        statusText.innerText =
+            `Memproses ${i+1}/${pairs.length}...\n${b.name}`;
+        setProgress(Math.round((i / pairs.length) * 100));
+        log(`▶ ${b.name}`, 'info');
+
+        try {
+            const mergedBytes = await mergeOne(a, b);
+            zip.file(baseName(b.name) + '.pdf', mergedBytes);
+            log(`  ✅ Selesai`, 'ok');
+            success++;
+        } catch (err){
+            console.error(err);
+            log(`  ❌ Gagal: ${err.message}`, 'err');
+            failed++;
+        }
+    }
+
+    setProgress(95);
+    statusText.innerText = 'Membuat ZIP...';
+    log('📦 Membuat file ZIP...', 'info');
+
+    const blob = await zip.generateAsync(
+        { type: 'blob', compression: 'STORE' },
+        (meta) => {
+            setProgress(95 + Math.round(meta.percent * 0.05));
+        }
+    );
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'hasil-merge.zip';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setProgress(100);
+    statusText.innerText =
+        `✅ Selesai: ${success} berhasil, ${failed} gagal.`;
+    log(`✅ Selesai: ${success} berhasil, ${failed} gagal.`, 'ok');
+
+    downloadBtn.disabled = false;
+    setTimeout(() => setProgress(null), 1500);
+}
+
+// ===== Merge 1 pasang: File A hal 1 + File B semua halaman =====
+async function mergeOne(fileA, fileB){
+    const bytesA = new Uint8Array(await fileA.arrayBuffer());
+    const bytesB = new Uint8Array(await fileB.arrayBuffer());
+
+    const pdfA = await PDFLib.PDFDocument.load(bytesA, {
+        ignoreEncryption: true,
+        updateMetadata: false
+    });
+    const pdfB = await PDFLib.PDFDocument.load(bytesB, {
+        ignoreEncryption: true,
+        updateMetadata: false
+    });
+
+    const merged = await PDFLib.PDFDocument.create();
+
+    // File A halaman 1
+    if (pdfA.getPageCount() >= 1){
+        const [pageA] = await merged.copyPages(pdfA, [0]);
+        merged.addPage(pageA);
+    }
+
+    // File B semua halaman
+    const totalB = pdfB.getPageCount();
+    const indicesB = Array.from({ length: totalB }, (_, i) => i);
+    const pagesB = await merged.copyPages(pdfB, indicesB);
+    pagesB.forEach(p => merged.addPage(p));
+
+    return await merged.save({ useObjectStreams: true });
+}
+
+</script>
+
+</body>
+</html>
