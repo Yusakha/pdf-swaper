@@ -3,94 +3,231 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Page Editor (Local)</title>
+<title>PDF Page Editor</title>
 
-<script src="libs/pdf.min.js"></script>
-<script src="libs/pdf-lib.min.js"></script>
-<script src="libs/Sortable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <style>
-body{margin:0;padding:20px;font-family:Arial,sans-serif;background:#f5f5f5}
-h1{text-align:center}
-.toolbar{display:flex;gap:15px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:20px}
-.upload-box{background:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.1);display:flex;flex-direction:column;gap:6px}
-.upload-box label{font-size:12px;font-weight:bold;color:#2563eb}
-.upload-box input[type=file]{font-size:13px}
-button{padding:10px 18px;border:none;border-radius:8px;cursor:pointer;font-weight:bold}
-.primary{background:#2563eb;color:#fff}
-.primary:hover{background:#1d4ed8}
-#pages{display:flex;flex-wrap:wrap;gap:15px;min-height:50px}
-.page-card{width:180px;background:#fff;border-radius:10px;padding:10px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:move;position:relative}
-.page-card canvas{width:100%;display:block;border:1px solid #ddd;background:#eee;min-height:120px}
-.page-info{margin-top:8px;text-align:center;font-size:12px;word-break:break-word}
-.page-info .badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:bold;color:#fff;margin-bottom:3px}
-.badge-a{background:#2563eb}.badge-b{background:#16a34a}
-.delete-btn{position:absolute;top:5px;right:5px;width:26px;height:26px;border:none;border-radius:50%;background:red;color:#fff;font-weight:bold;cursor:pointer;font-size:14px;line-height:1;z-index:2}
-.delete-btn:hover{background:#b91c1c}
-.status{text-align:center;margin:10px 0;color:#444;font-size:14px}
+body{
+    margin:0;
+    padding:20px;
+    font-family:Arial, sans-serif;
+    background:#f5f5f5;
+}
+
+h1{
+    text-align:center;
+}
+
+.toolbar{
+    display:flex;
+    gap:15px;
+    justify-content:center;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:20px;
+}
+
+.upload-box{
+    background:white;
+    padding:12px 16px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.upload-box label{
+    font-size:12px;
+    font-weight:bold;
+    color:#2563eb;
+}
+
+.upload-box input[type=file]{
+    font-size:13px;
+}
+
+button{
+    padding:10px 18px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:bold;
+}
+
+.primary{
+    background:#2563eb;
+    color:white;
+}
+
+.primary:hover{
+    background:#1d4ed8;
+}
+
+#pages{
+    display:flex;
+    flex-wrap:wrap;
+    gap:15px;
+    min-height:50px;
+}
+
+.page-card{
+    width:180px;
+    background:white;
+    border-radius:10px;
+    padding:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);
+    cursor:move;
+    position:relative;
+}
+
+.page-card canvas{
+    width:100%;
+    display:block;
+    border:1px solid #ddd;
+}
+
+.page-info{
+    margin-top:8px;
+    text-align:center;
+    font-size:12px;
+    word-break:break-word;
+}
+
+.page-info .badge{
+    display:inline-block;
+    padding:1px 6px;
+    border-radius:4px;
+    font-size:10px;
+    font-weight:bold;
+    color:white;
+    margin-bottom:3px;
+}
+
+.badge-a{ background:#2563eb; }
+.badge-b{ background:#16a34a; }
+
+.delete-btn{
+    position:absolute;
+    top:5px;
+    right:5px;
+    width:26px;
+    height:26px;
+    border:none;
+    border-radius:50%;
+    background:red;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+    font-size:14px;
+    line-height:1;
+    z-index:2;
+}
+
+.delete-btn:hover{
+    background:#b91c1c;
+}
+
+.status{
+    text-align:center;
+    margin-top:10px;
+    margin-bottom:10px;
+    color:#444;
+    font-size:14px;
+}
 </style>
 </head>
 <body>
 
-<h1>PDF Page Editor (Local)</h1>
+<h1>PDF Page Editor</h1>
 
 <div class="toolbar">
     <div class="upload-box">
-        <label>📄 FILE A (halaman 1 saja)</label>
+        <label>📄 FILE A (ambil halaman 1 saja)</label>
         <input type="file" id="fileA" accept=".pdf">
     </div>
+
     <div class="upload-box">
-        <label>📚 FILE B (semua halaman)</label>
+        <label>📚 FILE B (ambil semua halaman)</label>
         <input type="file" id="fileB" accept=".pdf">
     </div>
-    <button class="primary" id="downloadBtn">⬇ Download PDF Baru</button>
+
+    <button class="primary" id="downloadBtn">
+        ⬇ Download PDF Baru
+    </button>
 </div>
 
 <div class="status" id="status"></div>
+
 <div id="pages"></div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.min.js';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const pagesContainer = document.getElementById('pages');
-const statusText     = document.getElementById('status');
-const fileAInput     = document.getElementById('fileA');
-const fileBInput     = document.getElementById('fileB');
+const statusText = document.getElementById('status');
+const fileAInput = document.getElementById('fileA');
+const fileBInput = document.getElementById('fileB');
 
-let pdfA = null;
-let pdfB = null;
-let pagesA = [];
-let pagesB = [];
+let uploadedPdfs = {};   // { pdfId: Uint8Array }
+let pageStore = [];      // metadata tiap halaman
 let outputName = 'edited.pdf';
 
-const pdfjsCache = {};
-
-new Sortable(pagesContainer, { animation: 150 });
-
-const THUMB_MAX_WIDTH = 150;
-const CONCURRENCY     = 4;
+// Sortable untuk swap / reorder
+new Sortable(pagesContainer, {
+    animation: 150
+});
 
 function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    return Date.now().toString(36) +
+           Math.random().toString(36).substring(2);
 }
+
+// Bersihkan nama file dari suffix " (n)" sebelum .pdf
 function cleanFileName(name) {
-    return name.replace(/\s*\(\d+\)(?=\.pdf$)/i, '').trim();
+    return name
+        .replace(/\s*\(\d+\)(?=\.pdf$)/i, '')
+        .trim();
 }
 
-function renderAll() {
+// Reset semua state (dipanggil tiap upload baru)
+function resetAll() {
+    uploadedPdfs = {};
+    pageStore = [];
     pagesContainer.innerHTML = '';
-    const allPages = [...pagesB, ...pagesA];
-    allPages.forEach(p => pagesContainer.appendChild(p.card));
-    updateStatus();
+    outputName = 'edited.pdf';
 }
 
-function updateStatus() {
-    const total = pagesA.length + pagesB.length;
-    statusText.innerText = `${total} halaman siap diedit (A: ${pagesA.length}, B: ${pagesB.length})`;
-}
+// Render 1 halaman jadi card
+async function renderPageToCard(pdf, pageNum, pdfId, fileName, tag) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 0.4 });
 
-function createCardPlaceholder(pdfId, pageNum, fileName, tag) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({
+        canvasContext: context,
+        viewport: viewport
+    }).promise;
+
     const pageId = generateId();
+
+    pageStore.push({
+        id: pageId,
+        pdfId: pdfId,
+        pageNumber: pageNum,
+        fileName: fileName,
+        tag: tag
+    });
+
     const card = document.createElement('div');
     card.className = 'page-card';
     card.dataset.id = pageId;
@@ -98,13 +235,15 @@ function createCardPlaceholder(pdfId, pageNum, fileName, tag) {
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'delete-btn';
     deleteBtn.innerHTML = '&times;';
-
-    const canvas = document.createElement('canvas');
-    canvas.width = THUMB_MAX_WIDTH;
-    canvas.height = Math.round(THUMB_MAX_WIDTH * 1.4);
+    deleteBtn.onclick = () => {
+        pageStore = pageStore.filter(p => p.id !== pageId);
+        card.remove();
+        updateStatus();
+    };
 
     const info = document.createElement('div');
     info.className = 'page-info';
+
     const badgeClass = tag === 'A' ? 'badge-a' : 'badge-b';
     info.innerHTML = `
         <span class="badge ${badgeClass}">FILE ${tag}</span><br>
@@ -116,130 +255,83 @@ function createCardPlaceholder(pdfId, pageNum, fileName, tag) {
     card.appendChild(canvas);
     card.appendChild(info);
 
-    deleteBtn.onclick = () => {
-        pagesA = pagesA.filter(p => p.id !== pageId);
-        pagesB = pagesB.filter(p => p.id !== pageId);
-        card.remove();
-        updateStatus();
-    };
-
-    return {
-        id: pageId,
-        pdfId,
-        pageNumber: pageNum,
-        fileName,
-        tag,
-        card,
-        canvas,
-        _rendered: false
-    };
+    pagesContainer.appendChild(card);
 }
 
-async function renderThumb(pageData) {
-    if (pageData._rendered) return;
-    pageData._rendered = true;
-
-    try {
-        const pdf = pdfjsCache[pageData.pdfId];
-        if (!pdf) return;
-
-        const page = await pdf.getPage(pageData.pageNumber);
-        const vp1 = page.getViewport({ scale: 1 });
-        const scale = THUMB_MAX_WIDTH / vp1.width;
-        const viewport = page.getViewport({ scale });
-
-        const canvas = pageData.canvas;
-        canvas.width  = Math.max(1, Math.floor(viewport.width));
-        canvas.height = Math.max(1, Math.floor(viewport.height));
-
-        const ctx = canvas.getContext('2d', { alpha: false });
-        ctx.imageSmoothingEnabled = false;
-
-        await page.render({
-            canvasContext: ctx,
-            viewport,
-            intent: 'display'
-        }).promise;
-    } catch (e) {
-        console.warn('thumb error', e);
-    }
+function updateStatus() {
+    statusText.innerText = `${pageStore.length} halaman siap diedit`;
 }
 
-async function renderAllThumbs(list) {
-    const queue = list.slice();
-    const workers = Array.from({ length: CONCURRENCY }, async () => {
-        while (queue.length) {
-            const item = queue.shift();
-            await renderThumb(item);
-        }
-    });
-    await Promise.all(workers);
-}
-
+// Handle upload FILE A → reset + ambil halaman 1 saja
 fileAInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
+    resetAll();
+
     try {
-        statusText.innerText = `Memproses File A: ${file.name}...`;
+        statusText.innerText = `Memproses ${file.name}...`;
 
-        const pdfBytes = new Uint8Array(await file.arrayBuffer());
+        const buffer = await file.arrayBuffer();
+        const pdfBytes = new Uint8Array(buffer);
+
         const pdfId = generateId();
-        pdfA = { id: pdfId, bytes: pdfBytes.slice(), fileName: file.name };
+        uploadedPdfs[pdfId] = pdfBytes.slice();
 
-        const pdf = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
-        pdfjsCache[pdfId] = pdf;
+        const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
-        const cardData = createCardPlaceholder(pdfId, 1, file.name, 'A');
-        pagesA = [cardData];
-        renderAll();
-        renderThumb(cardData);
+        // Ambil halaman 1 saja
+        await renderPageToCard(pdf, 1, pdfId, file.name, 'A');
 
+        updateStatus();
     } catch (error) {
         console.error(error);
-        alert('Gagal membuka File A: ' + file.name);
+        alert('Gagal membuka PDF: ' + file.name);
         statusText.innerText = 'Error';
     }
 });
 
+// Handle upload FILE B → reset + ambil SEMUA halaman
 fileBInput.addEventListener('change', async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
+    resetAll();
+
+    // Nama output diambil dari file B (cleaned)
+    outputName = cleanFileName(file.name);
+
     try {
-        statusText.innerText = `Memproses File B: ${file.name}...`;
+        statusText.innerText = `Memproses ${file.name}...`;
 
-        const pdfBytes = new Uint8Array(await file.arrayBuffer());
+        const buffer = await file.arrayBuffer();
+        const pdfBytes = new Uint8Array(buffer);
+
         const pdfId = generateId();
-        pdfB = { id: pdfId, bytes: pdfBytes.slice(), fileName: file.name };
-        outputName = cleanFileName(file.name);
+        uploadedPdfs[pdfId] = pdfBytes.slice();
 
-        const pdf = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
-        pdfjsCache[pdfId] = pdf;
+        const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
 
-        const newPages = [];
+        // Ambil semua halaman
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            newPages.push(createCardPlaceholder(pdfId, pageNum, file.name, 'B'));
+            await renderPageToCard(pdf, pageNum, pdfId, file.name, 'B');
         }
-        pagesB = newPages;
-        renderAll();
 
-        renderAllThumbs(newPages).then(() => {
-            statusText.innerText = `${pagesA.length + pagesB.length} halaman siap diedit`;
-        });
-
+        updateStatus();
     } catch (error) {
         console.error(error);
-        alert('Gagal membuka File B: ' + file.name);
+        alert('Gagal membuka PDF: ' + file.name);
         statusText.innerText = 'Error';
     }
 });
 
+// Export PDF
 document.getElementById('downloadBtn').addEventListener('click', exportPDF);
 
 async function exportPDF() {
     try {
         const cards = [...document.querySelectorAll('.page-card')];
+
         if (cards.length === 0) {
             alert('Tidak ada halaman');
             return;
@@ -247,40 +339,41 @@ async function exportPDF() {
 
         statusText.innerText = 'Membuat PDF baru...';
 
-        const allPages = [...pagesA, ...pagesB];
-        const pageMap = {};
-        allPages.forEach(p => pageMap[p.id] = p);
-
         const mergedPdf = await PDFLib.PDFDocument.create();
         const cache = {};
 
         for (const card of cards) {
-            const pageData = pageMap[card.dataset.id];
+            const pageData = pageStore.find(p => p.id === card.dataset.id);
             if (!pageData) continue;
 
             if (!cache[pageData.pdfId]) {
-                let sourceBytes = null;
-                if (pdfA && pdfA.id === pageData.pdfId) sourceBytes = pdfA.bytes;
-                if (pdfB && pdfB.id === pageData.pdfId) sourceBytes = pdfB.bytes;
-                if (!sourceBytes) continue;
-                cache[pageData.pdfId] = await PDFLib.PDFDocument.load(sourceBytes);
+                cache[pageData.pdfId] = await PDFLib.PDFDocument.load(
+                    uploadedPdfs[pageData.pdfId]
+                );
             }
 
             const sourcePdf = cache[pageData.pdfId];
-            const [copied] = await mergedPdf.copyPages(sourcePdf, [pageData.pageNumber - 1]);
-            mergedPdf.addPage(copied);
+            const copiedPages = await mergedPdf.copyPages(
+                sourcePdf,
+                [pageData.pageNumber - 1]
+            );
+
+            mergedPdf.addPage(copiedPages[0]);
         }
 
         const pdfBytes = await mergedPdf.save();
+
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
 
         const a = document.createElement('a');
         a.href = url;
         a.download = outputName;
+
         document.body.appendChild(a);
         a.click();
         a.remove();
+
         URL.revokeObjectURL(url);
 
         statusText.innerText = 'PDF berhasil dibuat';
@@ -290,6 +383,8 @@ async function exportPDF() {
         alert('Error: ' + error.message);
     }
 }
+
 </script>
+
 </body>
 </html>
